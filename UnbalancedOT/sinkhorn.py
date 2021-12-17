@@ -33,8 +33,7 @@ def calc_k_stop(p: EntRegUOT, eps: float) -> int:
     return int(k_float)
 
 
-def sinkhorn_entreg_uot(p: EntRegUOT,
-                        eps: float) -> np.ndarray:
+def sinkhorn(p: EntRegUOT, k_stop: int) -> np.ndarray:
     log = {'u': [], 'v': []}
 
     # Find problem dimension
@@ -43,10 +42,6 @@ def sinkhorn_entreg_uot(p: EntRegUOT,
     # Initialize
     u = np.zeros(n, dtype=np.float128)
     v = np.zeros(n, dtype=np.float128)
-
-    # Find stopping condition
-    k_stop = calc_k_stop(p, eps)
-    log['k_stop'] = k_stop
 
     # Loop
     scale = p.eta * p.tau / (p.eta + p.tau)
@@ -65,3 +60,17 @@ def sinkhorn_entreg_uot(p: EntRegUOT,
         log['v'].append(v)
 
     return calc_B(p, u, v), log
+
+
+def sinkhorn_entreg_uot(p: EntRegUOT,
+                        eps: float) -> np.ndarray:
+    # Find stopping condition
+    k_stop = calc_k_stop(p, eps)
+
+    # Perform Sinkhorn iterations
+    X, log = sinkhorn(p, k_stop)
+
+    # Add k_stop to logger
+    log['k_stop'] = k_stop
+
+    return X, log
