@@ -88,6 +88,6 @@ def exact_entreg_uot(p: EntRegUOT):
     obj += p.tau * cp.sum(cp.multiply(cp.exp(-v / p.tau), p.b))
 
     prob = cp.Problem(cp.Minimize(obj))
-    prob.solve(cp.SCS)
+    prob.solve()
 
     return prob.value, u.value, v.value
