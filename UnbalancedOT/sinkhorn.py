@@ -10,13 +10,13 @@ def sinkhorn(p: EntRegUOT, niters: int) -> np.ndarray:
     n = p.C.shape[0]
 
     log = {
-        'u': np.empty((niters + 1, n), dtype=np.float64),
-        'v': np.empty((niters + 1, n), dtype=np.float64),
+        'u': np.empty((niters + 1, n), dtype=np.float128),
+        'v': np.empty((niters + 1, n), dtype=np.float128),
     }
 
     # Initialize
-    u = np.zeros(n, dtype=np.float64)
-    v = np.zeros(n, dtype=np.float64)
+    u = np.zeros(n, dtype=np.float128)
+    v = np.zeros(n, dtype=np.float128)
 
     # Loop
     scale = p.eta * p.tau / (p.eta + p.tau)
