@@ -24,7 +24,7 @@ def calc_f(p: UOT,
         + p.tau * calc_KL(X.sum(0), p.b)
 
 
-def exact_uot(p: UOT):
+def exact_uot(p: UOT, verbose: bool = False):
     n = p.C.shape[0]
     X = cp.Variable((n, n), nonneg=True)
 
@@ -33,7 +33,7 @@ def exact_uot(p: UOT):
         + p.tau * cp.sum(cp.kl_div(cp.sum(X, 0), p.b))
 
     prob = cp.Problem(cp.Minimize(obj))
-    prob.solve()
+    prob.solve(verbose=verbose)
 
     return prob.value, X.value
 
