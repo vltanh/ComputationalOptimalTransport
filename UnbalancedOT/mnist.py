@@ -7,6 +7,8 @@ import pickle
 def download_mnist(root_dir):
     data_loc = os.path.join(root_dir, 'mnist.pkl.gz')
     if not os.path.exists(data_loc):
+        if not os.path.exists(root_dir):
+            os.makedirs(root_dir, exist_ok=True)
         url = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
         data_loc = os.path.join(root_dir, 'mnist.pkl.gz')
         data_loc, _ = request.urlretrieve(url, data_loc)

@@ -1,30 +1,38 @@
 import numpy as np
 
 from uot import UOT, EntRegUOT
-from uot import calc_B
+from uot import calc_f, calc_B
 from utils import norm_inf
 
 
-def sinkhorn(p: EntRegUOT, niters: int) -> np.ndarray:
+def sinkhorn(p: EntRegUOT,
+             niters: int,
+             save_uv: bool = True,
+             float_type=np.float128,
+             verbose: bool = False):
+    log = dict()
+    if save_uv:
+        log['u'] = []
+        log['v'] = []
+
     # Find problem dimension
     n = p.C.shape[0]
 
-    log = {
-        'u': np.empty((niters + 1, n), dtype=np.float128),
-        'v': np.empty((niters + 1, n), dtype=np.float128),
-    }
-
     # Initialize
-    u = np.zeros(n, dtype=np.float128)
-    v = np.zeros(n, dtype=np.float128)
+    u = np.zeros(n, dtype=float_type)
+    v = np.zeros(n, dtype=float_type)
 
     # Loop
     scale = p.eta * p.tau / (p.eta + p.tau)
     for k in range(niters):
-        log['u'][k] = u
-        log['v'][k] = v
+        if save_uv:
+            log['u'].append(u)
+            log['v'].append(v)
 
         X = calc_B(p, u, v)
+
+        if verbose and k % 100 == 0:
+            print(k, calc_f(p, X))
 
         # Update
         if k % 2 == 0:
@@ -34,8 +42,75 @@ def sinkhorn(p: EntRegUOT, niters: int) -> np.ndarray:
             bk = X.sum(0)
             v = (v / p.eta + np.log(p.b / bk)) * scale
 
-    log['u'][-1] = u
-    log['v'][-1] = v
+    if save_uv:
+        log['u'].append(u)
+        log['v'].append(v)
+
+    if save_uv:
+        log['u'] = np.vstack(log['u'])
+        log['v'] = np.vstack(log['u'])
+
+    return calc_B(p, u, v), log
+
+
+def sinkhorn_eps(p: EntRegUOT,
+                 f_optimal: float,
+                 eps: float,
+                 patience: int = 0,
+                 save_uv: bool = True,
+                 float_type=np.float128,
+                 verbose: bool = False):
+    log = dict()
+    if save_uv:
+        log['u'] = []
+        log['v'] = []
+    log['f'] = []
+
+    # Find problem dimension
+    n = p.C.shape[0]
+
+    # Initialize
+    u = np.zeros(n, dtype=float_type)
+    v = np.zeros(n, dtype=float_type)
+
+    # Loop
+    scale = p.eta * p.tau / (p.eta + p.tau)
+
+    k = 0
+    c = 0
+    while True:
+        if save_uv:
+            log['u'].append(u)
+            log['v'].append(v)
+
+        X = calc_B(p, u, v)
+        f = calc_f(p, X)
+
+        if verbose and k % 100 == 0:
+            print(k, f)
+
+        log['f'].append(f)
+
+        if f - f_optimal <= eps:
+            c += 1
+            if c > patience:
+                break
+            else:
+                c = 1
+
+        # Update
+        if k % 2 == 0:
+            ak = X.sum(-1)
+            u = (u / p.eta + np.log(p.a / ak)) * scale
+        else:
+            bk = X.sum(0)
+            v = (v / p.eta + np.log(p.b / bk)) * scale
+
+        k += 1
+
+    if save_uv:
+        log['u'] = np.vstack(log['u'])
+        log['v'] = np.vstack(log['v'])
 
     return calc_B(p, u, v), log
 
