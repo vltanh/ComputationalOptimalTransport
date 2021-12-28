@@ -53,6 +53,12 @@ def calc_B(p: EntRegUOT,
     return np.exp((u[:, np.newaxis] + v[np.newaxis, :] - p.C) / p.eta)
 
 
+def calc_logB(p: EntRegUOT,
+              u: np.ndarray,
+              v: np.ndarray) -> np.ndarray:
+    return (u[:, np.newaxis] + v[np.newaxis, :] - p.C) / p.eta
+
+
 def calc_g(p: EntRegUOT,
            X: np.ndarray) -> float:
     return calc_f(p, X) - p.eta * calc_entropy(X)

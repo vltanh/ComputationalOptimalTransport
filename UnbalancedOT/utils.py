@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.spatial.distance import cdist
+from scipy.special import xlogy
 
 
 def norm_inf(x: np.ndarray) -> float:
@@ -7,11 +8,11 @@ def norm_inf(x: np.ndarray) -> float:
 
 
 def calc_entropy(P: np.ndarray) -> float:
-    return -np.sum(P * np.log(P) - P)
+    return -np.sum(xlogy(P, P) - P)
 
 
 def calc_KL(x: np.ndarray, y: np.ndarray) -> float:
-    return np.sum(x * np.log(x / y) - x + y)
+    return np.sum(xlogy(x, x / y) - x + y)
 
 
 def get_distance_matrix(n: int, d: str = 'cityblock'):
