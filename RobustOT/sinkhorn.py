@@ -63,26 +63,29 @@ def robust_semisinkhorn(p: EntropicRSOT,
 
     # Loop
     k = 0
+    c = 0
     while True:
-        Xk = calc_B(p, u, v)
+        Xk = calc_logB(p, u, v)
 
-        f = calc_f_rsot(p, Xk)
+        f = calc_f_rsot(p, np.exp(Xk))
         log['f'].append(f)
 
-        if k >= k_stop:
-            break
-
-        if verbose and k % 100 == 0:
+        if verbose and k % 1000 == 0:
             print(k, f)
+
+        if k >= k_stop:
+            if verbose:
+                print(k, f)
+            break
 
         # Update
         if k % 2 == 0:
-            ak = Xk.sum(-1)
-            u = (u / p.eta + np.log(p.a / ak)) \
+            log_ak = logsumexp(Xk, -1)
+            u = (u / p.eta + np.log(p.a) - log_ak) \
                 * (p.eta * p.tau) / (p.eta + p.tau)
         else:
-            bk = Xk.sum(0)
-            v = (v / p.eta + np.log(p.b / bk)) * p.eta
+            log_bk = logsumexp(Xk, 0)
+            v = (v / p.eta + np.log(p.b) - log_bk) * p.eta
 
         if save_uv:
             log['u'].append(u)
@@ -136,6 +139,8 @@ def robust_semisinkhorn_eps(p: EntropicRSOT,
         if f - f_optimal <= eps:
             c += 1
             if c > patience:
+                if verbose:
+                    print(k, f)
                 break
         else:
             c = 1

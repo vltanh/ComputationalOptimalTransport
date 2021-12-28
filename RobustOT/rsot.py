@@ -77,7 +77,7 @@ def calc_h_rsot(p: EntropicRSOT,
         - (v @ p.b)
 
 
-def exact_entreg_uot(p: EntropicRSOT):
+def exact_entreg_rsot(p: EntropicRSOT):
     n = p.C.shape[0]
 
     u = cp.Variable(shape=n)
