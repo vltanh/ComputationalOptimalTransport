@@ -5,6 +5,32 @@ from uot import calc_f, calc_B
 from utils import norm_inf
 
 
+def sinkhorn_raw(p: EntRegUOT,
+                 niters: int,
+                 float_type=np.float128):
+    # Find problem dimension
+    n = p.C.shape[0]
+
+    # Initialize
+    u = np.zeros(n, dtype=float_type)
+    v = np.zeros(n, dtype=float_type)
+
+    # Loop
+    scale = p.eta * p.tau / (p.eta + p.tau)
+    for k in range(niters):
+        X = calc_B(p, u, v)
+
+        # Update
+        if k % 2 == 0:
+            ak = X.sum(-1)
+            u = (u / p.eta + np.log(p.a / ak)) * scale
+        else:
+            bk = X.sum(0)
+            v = (v / p.eta + np.log(p.b / bk)) * scale
+
+    return calc_B(p, u, v)
+
+
 def sinkhorn(p: EntRegUOT,
              niters: int,
              save_uv: bool = True,
