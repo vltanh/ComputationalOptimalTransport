@@ -55,7 +55,7 @@ def exact_rsbp(p: RSBP, verbose: bool = False):
     prob = cp.Problem(objective, constraints)
     prob.solve(verbose=verbose)
 
-    return prob.value, [XX.value for XX in X]
+    return prob.value, np.array([XX.value for XX in X])
 
 
 # ======================================= #
@@ -137,20 +137,34 @@ def exact_entreg_rsbp(p: EntropicRSBP, verbose: bool = False):
     return prob.value, u.value, v.value
 
 
-# def exact_entreg_rsot_primal(p: EntropicRSOT, verbose: bool = False):
-#     n = p.C.shape[0]
-#     X = cp.Variable((n, n), nonneg=True)
+def exact_entreg_rsbp_primal(p: EntropicRSBP,
+                             with_norm_constraint: bool = False,
+                             verbose: bool = False):
+    n = p.C.shape[1]
+    m = p.w.shape[0]
+    X = [
+        cp.Variable((n, n), nonneg=True)
+        for _ in range(m)
+    ]
 
-#     f = cp.sum(cp.multiply(p.C, X)) \
-#         + p.tau * cp.sum(cp.kl_div(cp.sum(X, 1), p.a)) \
-#         - p.eta * cp.sum(cp.entr(X))
-#     objective = cp.Minimize(f)
+    f = 0
+    for i in range(m):
+        f += p.w[i] \
+            * (cp.sum(cp.multiply(p.C[i], X[i]))
+               + p.tau * cp.sum(cp.kl_div(cp.sum(X[i], 1), p.p[i])))
+    objective = cp.Minimize(f)
 
-#     constraints = [
-#         cp.sum(X, 0) == p.b,
-#     ]
+    constraints = [
+        cp.sum(X[i], 0) == cp.sum(X[i+1], 0)
+        for i in range(m-1)
+    ]
+    if with_norm_constraint:
+        constraints += [
+            cp.sum(X[i]) == 1
+            for i in range(m)
+        ]
 
-#     prob = cp.Problem(objective, constraints)
-#     prob.solve(verbose=verbose)
+    prob = cp.Problem(objective, constraints)
+    prob.solve(verbose=verbose)
 
-#     return prob.value, X.value
+    return prob.value, np.array([XX.value for XX in X])
