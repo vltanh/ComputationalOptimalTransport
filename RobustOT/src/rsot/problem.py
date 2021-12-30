@@ -82,9 +82,9 @@ class EntropicRSOT(RSOT):
             + self.tau * (np.exp(- u / self.tau) @ self.a) \
             - (v @ self.b)
 
-    def optimize_g_primal(self,
-                          solver: str = 'ECOS',
-                          verbose: bool = False) -> np.ndarray:
+    def optimize_g(self,
+                   solver: str = 'ECOS',
+                   verbose: bool = False) -> np.ndarray:
         X = cp.Variable((self.n, self.n), nonneg=True)
 
         g = cp.sum(cp.multiply(self.C, X)) \
@@ -101,9 +101,9 @@ class EntropicRSOT(RSOT):
 
         return X.value
 
-    def optimize_g_dual(self,
-                        solver: str = 'ECOS',
-                        verbose: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    def optimize_h(self,
+                   solver: str = 'ECOS',
+                   verbose: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         u = cp.Variable(shape=self.n)
         v = cp.Variable(shape=self.n)
 
