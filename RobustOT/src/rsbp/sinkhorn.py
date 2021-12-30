@@ -1,7 +1,7 @@
 import numpy as np
 
-from rsbp import RSBP, EntropicRSBP
-from rsbp import calc_f_rsbp, calc_B, calc_logB
+from src.rsbp.problem import RSBP, EntropicRSBP
+from src.rsbp.problem import calc_f_rsbp, calc_B, calc_logB
 from utils import norm_inf
 
 from scipy.special import logsumexp
