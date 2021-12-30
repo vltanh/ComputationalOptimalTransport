@@ -1,115 +1,116 @@
-from dataclasses import dataclass
+from typing import Tuple
 
 import numpy as np
 import cvxpy as cp
-from scipy.special import logsumexp
 
-from utils import calc_KL, calc_entropy
-
-# ======================================= #
-# ======================================= #
+from src.utils import calc_KL, calc_entropy
 
 
-@dataclass()
 class ROT:
-    C: np.ndarray
-    a: np.ndarray
-    b: np.ndarray
-    tau: float
+    def __init__(self,
+                 C: np.ndarray,
+                 a: np.ndarray,
+                 b: np.ndarray,
+                 tau: float) -> None:
+        self.C = C.copy()
+        self.a = a.copy()
+        self.b = b.copy()
+        self.tau = tau
 
+        self.n = self.C.shape[0]
 
-def calc_f_rot(p: ROT,
+    def calc_f(self,
                X: np.ndarray) -> float:
-    return (p.C * X).sum() \
-        + p.tau * calc_KL(X.sum(-1), p.a) \
-        + p.tau * calc_KL(X.sum(0), p.b)
+        return (self.C * X).sum() \
+            + self.tau * calc_KL(X.sum(-1), self.a) \
+            + self.tau * calc_KL(X.sum(0), self.b)
+
+    def optimize_f(self,
+                   solver: str = 'ECOS',
+                   verbose: bool = False) -> np.ndarray:
+        X = cp.Variable((self.n, self.n), nonneg=True)
+
+        f = cp.sum(cp.multiply(self.C, X)) \
+            + self.tau * cp.sum(cp.kl_div(cp.sum(X, 1), self.a)) \
+            + self.tau * cp.sum(cp.kl_div(cp.sum(X, 0), self.b))
+        objective = cp.Minimize(f)
+
+        constraints = [
+            cp.sum(X) == 1.0,
+        ]
+
+        prob = cp.Problem(objective, constraints)
+        prob.solve(verbose=verbose)
+
+        return X.value
+
+    def entropic_regularize(self, eta: float):
+        return EntropicROT(self.C, self.a, self.b, self.tau, eta)
 
 
-def exact_rot(p: ROT, verbose: bool = False):
-    n = p.C.shape[0]
-    X = cp.Variable((n, n), nonneg=True)
-
-    f = cp.sum(cp.multiply(p.C, X)) \
-        + p.tau * cp.sum(cp.kl_div(cp.sum(X, 1), p.a)) \
-        + p.tau * cp.sum(cp.kl_div(cp.sum(X, 0), p.b))
-    objective = cp.Minimize(f)
-
-    constraints = [
-        cp.sum(X) == 1.0,
-    ]
-
-    prob = cp.Problem(objective, constraints)
-    prob.solve(verbose=verbose)
-
-    return prob.value, X.value
-
-
-# ======================================= #
-# ======================================= #
-
-
-@dataclass()
 class EntropicROT(ROT):
-    eta: float
+    def __init__(self,
+                 C: np.ndarray,
+                 a: np.ndarray,
+                 b: np.ndarray,
+                 tau: float,
+                 eta: float) -> None:
+        super().__init__(C, a, b, tau)
+        self.eta = eta
 
+    def calc_B(self,
+               u: np.ndarray,
+               v: np.ndarray) -> np.ndarray:
+        return np.exp(self.calc_logB(u, v))
 
-def calc_B(p: EntropicROT,
-           u: np.ndarray,
-           v: np.ndarray) -> np.ndarray:
-    return np.exp((u[:, np.newaxis] + v[np.newaxis, :] - p.C) / p.eta)
+    def calc_logB(self,
+                  u: np.ndarray,
+                  v: np.ndarray) -> np.ndarray:
+        return (u[:, np.newaxis] + v[np.newaxis, :] - self.C) / self.eta
 
-
-def calc_logB(p: EntropicROT,
-              u: np.ndarray,
-              v: np.ndarray) -> np.ndarray:
-    return (u[:, np.newaxis] + v[np.newaxis, :] - p.C) / p.eta
-
-
-def calc_g_rot(p: EntropicROT,
+    def calc_g(self,
                X: np.ndarray) -> float:
-    return calc_f_rot(p, X) - p.eta * calc_entropy(X)
+        return self.calc_f(X) - self.eta * calc_entropy(X)
 
-
-def calc_h_rot(p: EntropicROT,
+    def calc_h(self,
                u: np.ndarray,
                v: np.ndarray) -> float:
-    B = calc_B(p, u, v)
-    return p.eta * np.sum(B) \
-        + p.tau * (np.exp(- u / p.tau) @ p.a) \
-        + p.tau * (np.exp(- v / p.tau) @ p.b)
+        B = self.calc_B(u, v)
+        return self.eta * np.sum(B) \
+            + self.tau * (np.exp(- u / self.tau) @ self.a) \
+            + self.tau * (np.exp(- v / self.tau) @ self.b)
 
+    def optimize_g(self,
+                   solver: str = 'ECOS',
+                   verbose: bool = False) -> np.ndarray:
+        X = cp.Variable((self.n, self.n), nonneg=True)
 
-def exact_entreg_rot(p: EntropicROT, verbose: bool = False):
-    n = p.C.shape[0]
+        f = cp.sum(cp.multiply(self.C, X)) \
+            + self.tau * cp.sum(cp.kl_div(cp.sum(X, 1), self.a)) \
+            - self.eta * cp.sum(cp.entr(X))
+        objective = cp.Minimize(f)
 
-    u = cp.Variable(shape=n)
-    v = cp.Variable(shape=n)
+        constraints = [
+            cp.sum(X) == 1.0,
+        ]
 
-    h = p.eta * cp.sum(cp.exp((u[:, None] + v[None, :] - p.C) / p.eta)) \
-        + p.tau * cp.sum(cp.multiply(cp.exp(-u / p.tau), p.a)) \
-        + p.tau * cp.sum(cp.multiply(cp.exp(-v / p.tau), p.b))
-    obj = cp.Minimize(h)
+        prob = cp.Problem(objective, constraints)
+        prob.solve(solver=solver, verbose=verbose)
 
-    prob = cp.Problem(obj)
-    prob.solve(verbose=verbose)
+        return X.value
 
-    return prob.value, u.value, v.value
+    def optimize_h(self,
+                   solver: str = 'ECOS',
+                   verbose: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        u = cp.Variable(shape=self.n)
+        v = cp.Variable(shape=self.n)
 
+        h = self.eta * cp.sum(cp.exp((u[:, None] + v[None, :] - self.C) / self.eta)) \
+            + self.tau * cp.sum(cp.multiply(cp.exp(-u / self.tau), self.a)) \
+            + self.tau * cp.sum(cp.multiply(cp.exp(-v / self.tau), self.b))
+        objective = cp.Minimize(h)
 
-def exact_entreg_rot_primal(p: EntropicROT, verbose: bool = False):
-    n = p.C.shape[0]
-    X = cp.Variable((n, n), nonneg=True)
+        prob = cp.Problem(objective)
+        prob.solve(solver=solver, verbose=verbose)
 
-    f = cp.sum(cp.multiply(p.C, X)) \
-        + p.tau * cp.sum(cp.kl_div(cp.sum(X, 1), p.a)) \
-        - p.eta * cp.sum(cp.entr(X))
-    objective = cp.Minimize(f)
-
-    constraints = [
-        cp.sum(X) == 1.0,
-    ]
-
-    prob = cp.Problem(objective, constraints)
-    prob.solve(verbose=verbose)
-
-    return prob.value, X.value
+        return u.value, v.value

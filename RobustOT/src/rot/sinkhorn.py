@@ -1,8 +1,7 @@
 import numpy as np
 
 from src.rot.problem import ROT, EntropicROT
-from src.rot.problem import calc_f_rot, calc_B, calc_logB
-from utils import norm_inf
+from src.utils import norm_inf
 
 from scipy.special import logsumexp
 
