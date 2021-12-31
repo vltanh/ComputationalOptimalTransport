@@ -1,4 +1,5 @@
 from typing import Tuple
+from cvxpy import constraints
 
 import numpy as np
 import cvxpy as cp
@@ -40,7 +41,7 @@ class ROT:
         ]
 
         prob = cp.Problem(objective, constraints)
-        prob.solve(verbose=verbose)
+        prob.solve(solver=solver, verbose=verbose)
 
         return X.value
 
@@ -81,18 +82,22 @@ class EntropicROT(ROT):
             + self.tau * (np.exp(- v / self.tau) @ self.b)
 
     def optimize_g(self,
+                   with_norm_constraint: bool = False,
                    solver: str = 'ECOS',
                    verbose: bool = False) -> np.ndarray:
         X = cp.Variable((self.n, self.n), nonneg=True)
 
-        f = cp.sum(cp.multiply(self.C, X)) \
+        g = cp.sum(cp.multiply(self.C, X)) \
             + self.tau * cp.sum(cp.kl_div(cp.sum(X, 1), self.a)) \
+            + self.tau * cp.sum(cp.kl_div(cp.sum(X, 0), self.b)) \
             - self.eta * cp.sum(cp.entr(X))
-        objective = cp.Minimize(f)
+        objective = cp.Minimize(g)
 
-        constraints = [
-            cp.sum(X) == 1.0,
-        ]
+        constraints = []
+        if with_norm_constraint:
+            constraints += [
+                cp.sum(X) == 1.0,
+            ]
 
         prob = cp.Problem(objective, constraints)
         prob.solve(solver=solver, verbose=verbose)
@@ -105,7 +110,7 @@ class EntropicROT(ROT):
         u = cp.Variable(shape=self.n)
         v = cp.Variable(shape=self.n)
 
-        h = self.eta * cp.sum(cp.exp((u[:, None] + v[None, :] - self.C) / self.eta)) \
+        h = self.eta * cp.log_sum_exp((u[:, None] + v[None, :] - self.C) / self.eta) \
             + self.tau * cp.sum(cp.multiply(cp.exp(-u / self.tau), self.a)) \
             + self.tau * cp.sum(cp.multiply(cp.exp(-v / self.tau), self.b))
         objective = cp.Minimize(h)

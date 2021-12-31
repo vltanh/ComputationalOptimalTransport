@@ -9,18 +9,16 @@ from scipy.special import logsumexp
 def robust_sinkhorn_raw(p: EntropicROT,
                         k_stop: int,
                         float_type=np.float64):
-    # Find problem dimension
-    n = p.C.shape[0]
-
     # Initialize
-    u = np.zeros(n, dtype=float_type)
-    v = np.zeros(n, dtype=float_type)
+    u = np.zeros(p.n, dtype=float_type)
+    v = np.zeros(p.n, dtype=float_type)
 
     # Loop
     scale = (p.eta * p.tau) / (p.eta + p.tau)
+
     k = 0
     while True:
-        Xk = calc_logB(p, u, v)
+        Xk = p.calc_logB(u, v)
 
         if k >= k_stop:
             break
@@ -31,11 +29,12 @@ def robust_sinkhorn_raw(p: EntropicROT,
             u = (u / p.eta + np.log(p.a) - log_ak) * scale
         else:
             log_bk = logsumexp(Xk, 0)
-            v = (v / p.eta + np.log(p.a) - log_bk) * scale
+            v = (v / p.eta + np.log(p.b) - log_bk) * scale
 
         k += 1
 
-    return np.exp(Xk - logsumexp(Xk))
+    _Xk = np.exp(Xk - logsumexp(Xk))
+    return _Xk
 
 
 def robust_sinkhorn(p: EntropicROT,
@@ -49,26 +48,23 @@ def robust_sinkhorn(p: EntropicROT,
         log['u'] = []
         log['v'] = []
 
-    # Find problem dimension
-    n = p.C.shape[0]
-
     # Initialize
-    u = np.zeros(n, dtype=float_type)
-    v = np.zeros(n, dtype=float_type)
+    u = np.zeros(p.n, dtype=float_type)
+    v = np.zeros(p.n, dtype=float_type)
 
     if save_uv:
-        log['u'].append(u)
-        log['v'].append(v)
+        log['u'].append(u.copy())
+        log['v'].append(v.copy())
 
     # Loop
     scale = (p.eta * p.tau) / (p.eta + p.tau)
 
     k = 0
     while True:
-        Xk = calc_logB(p, u, v)
+        Xk = p.calc_logB(u, v)
 
         _Xk = np.exp(Xk - logsumexp(Xk))
-        f = calc_f_rot(p, _Xk)
+        f = p.calc_f(_Xk)
         log['f'].append(f)
 
         if verbose and k % 1000 == 0:
@@ -85,7 +81,7 @@ def robust_sinkhorn(p: EntropicROT,
             u = (u / p.eta + np.log(p.a) - log_ak) * scale
         else:
             log_bk = logsumexp(Xk, 0)
-            v = (v / p.eta + np.log(p.a) - log_bk) * scale
+            v = (v / p.eta + np.log(p.b) - log_bk) * scale
 
         if save_uv:
             log['u'].append(u)
@@ -94,8 +90,8 @@ def robust_sinkhorn(p: EntropicROT,
         k += 1
 
     if save_uv:
-        log['u'] = np.vstack(log['u'])
-        log['v'] = np.vstack(log['v'])
+        log['u'] = np.vstack(log['u'].copy())
+        log['v'] = np.vstack(log['v'].copy())
 
     return Xk, log
 
@@ -113,16 +109,13 @@ def robust_sinkhorn_eps(p: EntropicROT,
         log['u'] = []
         log['v'] = []
 
-    # Find problem dimension
-    n = p.C.shape[0]
-
     # Initialize
-    u = np.zeros(n, dtype=float_type)
-    v = np.zeros(n, dtype=float_type)
+    u = np.zeros(p.n, dtype=float_type)
+    v = np.zeros(p.n, dtype=float_type)
 
     if save_uv:
-        log['u'].append(u)
-        log['v'].append(v)
+        log['u'].append(u.copy())
+        log['v'].append(v.copy())
 
     # Loop
     scale = (p.eta * p.tau) / (p.eta + p.tau)
@@ -130,10 +123,10 @@ def robust_sinkhorn_eps(p: EntropicROT,
     k = 0
     c = 0
     while True:
-        Xk = calc_logB(p, u, v)
+        Xk = p.calc_logB(u, v)
 
         _Xk = np.exp(Xk - logsumexp(Xk))
-        f = calc_f_rot(p, _Xk)
+        f = p.calc_f(_Xk)
         log['f'].append(f)
 
         if verbose and k % 1000 == 0:
@@ -154,11 +147,11 @@ def robust_sinkhorn_eps(p: EntropicROT,
             u = (u / p.eta + np.log(p.a) - log_ak) * scale
         else:
             log_bk = logsumexp(Xk, 0)
-            v = (v / p.eta + np.log(p.a) - log_bk) * scale
+            v = (v / p.eta + np.log(p.b) - log_bk) * scale
 
         if save_uv:
-            log['u'].append(u)
-            log['v'].append(v)
+            log['u'].append(u.copy())
+            log['v'].append(v.copy())
 
         k += 1
 
