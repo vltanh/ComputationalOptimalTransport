@@ -9,29 +9,26 @@ from scipy.special import logsumexp
 def robust_semisinkhorn_raw(p: EntropicRSOT,
                             k_stop: int,
                             float_type=np.float64):
-    # Find problem dimension
-    n = p.C.shape[0]
-
     # Initialize
-    u = np.zeros(n, dtype=float_type)
-    v = np.zeros(n, dtype=float_type)
+    u = np.zeros(p.n, dtype=float_type)
+    v = np.zeros(p.n, dtype=float_type)
 
     # Loop
     k = 0
     while True:
-        Xk = calc_B(p, u, v)
+        Xk = p.calc_logB(u, v)
 
         if k >= k_stop:
             break
 
         # Update
         if k % 2 == 0:
-            ak = Xk.sum(-1)
-            u = (u / p.eta + np.log(p.a / ak)) \
+            log_ak = logsumexp(Xk, -1)
+            u = (u / p.eta + np.log(p.a) - log_ak) \
                 * (p.eta * p.tau) / (p.eta + p.tau)
         else:
-            bk = Xk.sum(0)
-            v = (v / p.eta + np.log(p.b / bk)) * p.eta
+            log_bk = logsumexp(Xk, 0)
+            v = (v / p.eta + np.log(p.b) - log_bk) * p.eta
 
         k += 1
 
@@ -49,24 +46,20 @@ def robust_semisinkhorn(p: EntropicRSOT,
         log['u'] = []
         log['v'] = []
 
-    # Find problem dimension
-    n = p.C.shape[0]
-
     # Initialize
-    u = np.zeros(n, dtype=float_type)
-    v = np.zeros(n, dtype=float_type)
+    u = np.zeros(p.n, dtype=float_type)
+    v = np.zeros(p.n, dtype=float_type)
 
     if save_uv:
-        log['u'].append(u)
-        log['v'].append(v)
+        log['u'].append(u.copy())
+        log['v'].append(v.copy())
 
     # Loop
     k = 0
-    c = 0
     while True:
-        Xk = calc_logB(p, u, v)
+        Xk = p.calc_logB(u, v)
 
-        f = calc_f_rsot(p, np.exp(Xk))
+        f = p.calc_f(np.exp(Xk))
         log['f'].append(f)
 
         if verbose and k % 1000 == 0:
@@ -87,8 +80,8 @@ def robust_semisinkhorn(p: EntropicRSOT,
             v = (v / p.eta + np.log(p.b) - log_bk) * p.eta
 
         if save_uv:
-            log['u'].append(u)
-            log['v'].append(v)
+            log['u'].append(u.copy())
+            log['v'].append(v.copy())
 
         k += 1
 
@@ -112,16 +105,13 @@ def robust_semisinkhorn_eps(p: EntropicRSOT,
         log['u'] = []
         log['v'] = []
 
-    # Find problem dimension
-    n = p.C.shape[0]
-
     # Initialize
-    u = np.zeros(n, dtype=float_type)
-    v = np.zeros(n, dtype=float_type)
+    u = np.zeros(p.n, dtype=float_type)
+    v = np.zeros(p.n, dtype=float_type)
 
     if save_uv:
-        log['u'].append(u)
-        log['v'].append(v)
+        log['u'].append(u.copy())
+        log['v'].append(v.copy())
 
     # Loop
     k = 0
@@ -135,14 +125,15 @@ def robust_semisinkhorn_eps(p: EntropicRSOT,
         if verbose and k % 1000 == 0:
             print(k, f)
 
-        if f - f_optimal <= eps:
-            c += 1
-            if c > patience:
-                if verbose:
-                    print(k, f)
-                break
-        else:
-            c = 1
+        if k % 2 == 0:
+            if f - f_optimal <= eps:
+                c += 1
+                if c > patience:
+                    if verbose:
+                        print(k, f)
+                    break
+            else:
+                c = 1
 
         # Update
         if k % 2 == 0:
@@ -154,8 +145,8 @@ def robust_semisinkhorn_eps(p: EntropicRSOT,
             v = (v / p.eta + np.log(p.b) - log_bk) * p.eta
 
         if save_uv:
-            log['u'].append(u)
-            log['v'].append(v)
+            log['u'].append(u.copy())
+            log['v'].append(v.copy())
 
         k += 1
 
@@ -170,21 +161,17 @@ def robust_semisinkhorn_eps(p: EntropicRSOT,
 
 
 def calc_R(p: EntropicRSOT) -> float:
-    n = p.C.shape[0]
     R = max(norm_inf(np.log(p.a)), norm_inf(np.log(p.b))) + \
-        max(np.log(n), norm_inf(p.C) / p.eta - np.log(n))
+        max(np.log(p.n), norm_inf(p.C) / p.eta - np.log(p.n))
     return R
 
 
 def calc_U(p: RSOT, eps: float) -> float:
-    n = p.C.shape[0]
-    U = max(3 * np.log(n), eps / p.tau)
+    U = max(3 * np.log(p.n), eps / p.tau)
     return U
 
 
 def calc_k_formula(p: EntropicRSOT, eps: float) -> float:
-    n = p.C.shape[0]
-
     R = calc_R(p)
     U = calc_U(p, eps)
 
@@ -195,7 +182,7 @@ def calc_k_formula(p: EntropicRSOT, eps: float) -> float:
     k2 = (1 + p.tau / eta) \
         * np.log(3 * p.tau * R
                  * (2*(eta + p.tau) + 3*R*(2*p.tau + eta))
-                 / (eta ** 2 * np.log(n)))
+                 / (eta ** 2 * np.log(p.n)))
 
     k = 1 + 2 * max(k1, k2)
     return k
