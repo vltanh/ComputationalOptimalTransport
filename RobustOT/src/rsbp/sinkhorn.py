@@ -1,8 +1,7 @@
 import numpy as np
 
 from src.rsbp.problem import RSBP, EntropicRSBP
-from src.rsbp.problem import calc_f_rsbp, calc_B, calc_logB
-from utils import norm_inf
+from src.utils import norm_inf
 
 from scipy.special import logsumexp
 
@@ -10,100 +9,99 @@ from scipy.special import logsumexp
 def robust_ibp_raw(p: EntropicRSBP,
                    k_stop: int,
                    float_type=np.float64):
-    # Find problem dimension
-    n = p.C.shape[1]
-    m = p.w.shape[0]
-
     # Initialize
-    u = np.zeros((m, n), dtype=float_type)
-    v = np.zeros((m, n), dtype=float_type)
+    u = np.zeros((p.m, p.n), dtype=float_type)
+    v = np.zeros((p.m, p.n), dtype=float_type)
 
     # Loop
     k = 0
     while True:
-        Xk = calc_logB(p, u, v)
+        Xk = p.calc_logB(u, v)
 
         if k >= k_stop:
             break
 
         # Update
         if k % 2 == 0:
-            for i in range(m):
-                log_ak = logsumexp(Xk[i], -1)
-                u[i] = (u[i] / p.eta + np.log(p.p[i]) - log_ak) \
+            log_ak = logsumexp(Xk, 2)
+            for i in range(p.m):
+                u[i] = (u[i] / p.eta + np.log(p.p[i]) - log_ak[i]) \
                     * (p.eta * p.tau) / (p.eta + p.tau)
         else:
-            for i in range(m):
-                log_bk = logsumexp(Xk, 0)
-                v[i] = (v[i] / p.eta - log_bk) * p.eta
-                for j in range(m):
-                    j -= p.w[j] * (v[j] / p.eta - log_bk) * p.eta
+            log_bk = logsumexp(Xk, 1)
+            v_old = v.copy()
+            for i in range(p.m):
+                v[i] = (v_old[i] / p.eta - log_bk[i]) * p.eta
+                for j in range(p.m):
+                    v[i] -= p.w[j] * (v_old[j] / p.eta - log_bk[j]) * p.eta
 
         k += 1
 
-    return np.exp(Xk - logsumexp(Xk))
+    _Xk = np.exp(Xk - logsumexp(Xk, (1, 2), keepdims=True))
+    return _Xk
 
 
-# def robust_sinkhorn(p: EntropicROT,
-#                     k_stop: int,
-#                     save_uv: bool = True,
-#                     float_type=np.float64,
-#                     verbose: bool = False):
-#     log = dict()
-#     log['f'] = []
-#     if save_uv:
-#         log['u'] = []
-#         log['v'] = []
+def robust_ibp(p: EntropicRSBP,
+               k_stop: int,
+               save_uv: bool = True,
+               float_type=np.float64,
+               verbose: bool = False):
+    log = dict()
+    log['f'] = []
+    if save_uv:
+        log['u'] = []
+        log['v'] = []
 
-#     # Find problem dimension
-#     n = p.C.shape[0]
+    # Initialize
+    u = np.zeros((p.m, p.n), dtype=float_type)
+    v = np.zeros((p.m, p.n), dtype=float_type)
 
-#     # Initialize
-#     u = np.zeros(n, dtype=float_type)
-#     v = np.zeros(n, dtype=float_type)
+    if save_uv:
+        log['u'].append(u.copy())
+        log['v'].append(v.copy())
 
-#     if save_uv:
-#         log['u'].append(u)
-#         log['v'].append(v)
+    # Loop
+    k = 0
+    while True:
+        Xk = p.calc_logB(u, v)
 
-#     # Loop
-#     scale = (p.eta * p.tau) / (p.eta + p.tau)
+        _Xk = np.exp(Xk - logsumexp(Xk, (1, 2), keepdims=True))
+        f = p.calc_f(_Xk)
+        log['f'].append(f)
 
-#     k = 0
-#     while True:
-#         Xk = calc_logB(p, u, v)
+        if verbose and k % 1000 == 0:
+            print(k, f)
 
-#         _Xk = np.exp(Xk - logsumexp(Xk))
-#         f = calc_f_rot(p, _Xk)
-#         log['f'].append(f)
+        if k >= k_stop:
+            if verbose:
+                print(k, f)
+            break
 
-#         if verbose and k % 1000 == 0:
-#             print(k, f)
+        # Update
+        if k % 2 == 0:
+            log_ak = logsumexp(Xk, 2)
+            for i in range(p.m):
+                u[i] = (u[i] / p.eta + np.log(p.p[i]) - log_ak[i]) \
+                    * (p.eta * p.tau) / (p.eta + p.tau)
+        else:
+            log_bk = logsumexp(Xk, 1)
+            v_old = v.copy()
+            for i in range(p.m):
+                v[i] = (v_old[i] / p.eta - log_bk[i]) * p.eta
+                for j in range(p.m):
+                    v[i] -= p.w[j] * (v_old[j] / p.eta - log_bk[j]) * p.eta
 
-#         if k >= k_stop:
-#             if verbose:
-#                 print(k, f)
-#             break
+        if save_uv:
+            log['u'].append(u.copy())
+            log['v'].append(v.copy())
 
-#         # Update
-#         if k % 2 == 0:
-#             log_ak = logsumexp(Xk, -1)
-#             u = (u / p.eta + np.log(p.a) - log_ak) * scale
-#         else:
-#             log_bk = logsumexp(Xk, 0)
-#             v = (v / p.eta + np.log(p.a) - log_bk) * scale
+        k += 1
 
-#         if save_uv:
-#             log['u'].append(u)
-#             log['v'].append(v)
+    if save_uv:
+        log['u'] = np.stack(log['u'])
+        log['v'] = np.stack(log['v'])
 
-#         k += 1
-
-#     if save_uv:
-#         log['u'] = np.vstack(log['u'])
-#         log['v'] = np.vstack(log['v'])
-
-#     return Xk, log
+    return _Xk, log
 
 
 def robust_ibp_eps(p: EntropicRSBP,
@@ -119,26 +117,22 @@ def robust_ibp_eps(p: EntropicRSBP,
         log['u'] = []
         log['v'] = []
 
-    # Find problem dimension
-    n = p.C.shape[1]
-    m = p.w.shape[0]
-
     # Initialize
-    u = np.zeros((m, n), dtype=float_type)
-    v = np.zeros((m, n), dtype=float_type)
+    u = np.zeros((p.m, p.n), dtype=float_type)
+    v = np.zeros((p.m, p.n), dtype=float_type)
 
     if save_uv:
-        log['u'].append(u)
-        log['v'].append(v)
+        log['u'].append(u.copy())
+        log['v'].append(v.copy())
 
     # Loop
     k = 0
     c = 0
     while True:
-        Xk = calc_logB(p, u, v)
+        Xk = p.calc_logB(u, v)
 
-        _Xk = np.exp(Xk - logsumexp(Xk))
-        f = calc_f_rsbp(p, _Xk)
+        _Xk = np.exp(Xk - logsumexp(Xk, (1, 2), keepdims=True))
+        f = p.calc_f(_Xk)
         log['f'].append(f)
 
         if verbose and k % 1000 == 0:
@@ -156,26 +150,26 @@ def robust_ibp_eps(p: EntropicRSBP,
         # Update
         if k % 2 == 0:
             log_ak = logsumexp(Xk, 2)
-            for i in range(m):
+            for i in range(p.m):
                 u[i] = (u[i] / p.eta + np.log(p.p[i]) - log_ak[i]) \
                     * (p.eta * p.tau) / (p.eta + p.tau)
         else:
             log_bk = logsumexp(Xk, 1)
             v_old = v.copy()
-            for i in range(m):
+            for i in range(p.m):
                 v[i] = (v_old[i] / p.eta - log_bk[i]) * p.eta
-                for j in range(m):
+                for j in range(p.m):
                     v[i] -= p.w[j] * (v_old[j] / p.eta - log_bk[j]) * p.eta
 
         if save_uv:
-            log['u'].append(u)
-            log['v'].append(v)
+            log['u'].append(u.copy())
+            log['v'].append(v.copy())
 
         k += 1
 
     if save_uv:
-        log['u'] = np.vstack(log['u'])
-        log['v'] = np.vstack(log['v'])
+        log['u'] = np.stack(log['u'])
+        log['v'] = np.stack(log['v'])
 
     return _Xk, log
 
