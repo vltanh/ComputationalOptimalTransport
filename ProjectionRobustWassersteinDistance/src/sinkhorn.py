@@ -1,23 +1,19 @@
 import numpy as np
-from numpy.lib.npyio import save
 from scipy.special import logsumexp
 
 from src.prw import EntropicPRW
-
-
-def norm_inf(X):
-    return np.max(np.abs(X))
+from src.utils import norm_inf
 
 
 def RBCD(p: EntropicPRW,
-         u0, v0,
-         U0,
-         tau,
-         eps_1, eps_2,
+         u0: np.ndarray, v0: np.ndarray,
+         U0: np.ndarray,
+         tau: np.float64,
+         eps_1: np.float64, eps_2: np.float64,
          save_uv: bool = False,
          save_U: bool = False):
-    u, v = u0, v0
-    U = U0
+    u, v = u0.copy(), v0.copy()
+    U = U0.copy()
 
     log = dict()
     log['f'] = []
@@ -31,10 +27,7 @@ def RBCD(p: EntropicPRW,
 
     while True:
         # Compute pi using current U
-        projX = p.X @ U
-        projY = p.Y @ U
-        C = ((projX[..., None] - projY[..., None].T) ** 2).sum(1)
-        log_pi = (u[:, None] + v[None, :] - C) / p.eta
+        log_pi = p.calc_logpi(u, v, U)
 
         # Update u
         log_ak = logsumexp(log_pi, -1)
@@ -63,10 +56,10 @@ def RBCD(p: EntropicPRW,
         f = np.trace(U.T @ Vpi @ U)
         log['f'].append(f)
         if save_uv:
-            log['u'].append(u)
-            log['v'].append(v)
+            log['u'].append(u.copy())
+            log['v'].append(v.copy())
         if save_U:
-            log['U'].append(U)
+            log['U'].append(U.copy())
 
         # Check stopping condition
         if 4 * p.eta * np.linalg.norm(xi) <= eps_1 \
@@ -74,4 +67,4 @@ def RBCD(p: EntropicPRW,
                 and 8 * rawC_inf * np.linalg.norm(p.b - pi.sum(0)) <= eps_2:
             break
 
-    return pi, U, log
+    return log
