@@ -40,12 +40,15 @@ def RBCD(p: EntropicPRW,
     rawC_inf = norm_inf(((p.X[..., None] - p.Y[..., None].T) ** 2).sum(1))
 
     while True:
-        # Compute pi using current U
+        # Compute pi using current U and previous u, v
         log_pi = p.calc_logpi(u, v, U)
 
         # Update u
         log_ak = logsumexp(log_pi, -1)
         u = u + np.log(p.a) - log_ak
+
+        # Compute pi using current U, u and previous v
+        log_pi = p.calc_logpi(u, v, U)
 
         # Update v
         log_bk = logsumexp(log_pi, 0)
@@ -59,12 +62,12 @@ def RBCD(p: EntropicPRW,
             - A - A.T
 
         # Compute xi using new Vpi and current U
-        G = 2. / p.eta * Vpi @ U
+        G = - 2. / p.eta * Vpi @ U
         temp = G.T @ U
         xi = G - U @ (temp + temp.T) / 2.
 
         # Compute U^{(t+1)}
-        U, _ = np.linalg.qr(U + tau * xi)
+        U, _ = np.linalg.qr(U - tau * xi)
 
         # Log
         f = np.trace(U.T @ Vpi @ U)
@@ -80,5 +83,12 @@ def RBCD(p: EntropicPRW,
                 and 8 * rawC_inf * np.linalg.norm(p.a - pi.sum(-1)) <= eps_2 \
                 and 8 * rawC_inf * np.linalg.norm(p.b - pi.sum(0)) <= eps_2:
             break
+
+    log['f'] = np.array(log['f'])
+    if save_uv:
+        log['u'] = np.array(log['u'])
+        log['v'] = np.array(log['v'])
+    if save_U:
+        log['U'] = np.array(log['U'])
 
     return log
