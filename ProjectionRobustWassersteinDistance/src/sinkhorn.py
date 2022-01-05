@@ -5,6 +5,20 @@ from src.prw import EntropicPRW
 from src.utils import norm_inf
 
 
+def round_plan(pi, a, b):
+    x = np.clip(a / pi.sum(-1), a_min=None, a_max=1.0)
+    X = np.diag(x)
+    pi_ = X @ pi
+
+    y = np.clip(b / pi.sum(0), a_min=None, a_max=1.0)
+    Y = np.diag(y)
+    pi__ = pi_ @ Y
+
+    err_r = a - pi__.sum(-1)
+    err_c = b - pi__.sum(0)
+    return pi__ + err_r[:, None] @ err_c[None, :] / np.sum(np.abs(err_r))
+
+
 def RBCD(p: EntropicPRW,
          u0: np.ndarray, v0: np.ndarray,
          U0: np.ndarray,
