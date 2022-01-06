@@ -1,5 +1,7 @@
 import numpy as np
 
+from src.utils import pairwise_l2
+
 
 class WassersteinDistance:
     def __init__(self, X, Y, a, b) -> None:
@@ -19,6 +21,11 @@ class PRW(WassersteinDistance):
     def __init__(self, X, Y, a, b) -> None:
         super().__init__(X, Y, a, b)
 
+    def calc_proj_cost(self, U):
+        projX = self.X @ U
+        projY = self.Y @ U
+        return pairwise_l2(projX, projY)
+
     def entropic_regularize(self, eta):
         return EntropicPRW(self.X, self.Y, self.a, self.b, eta)
 
@@ -28,11 +35,8 @@ class EntropicPRW(PRW):
         super().__init__(X, Y, a, b)
         self.eta = eta
 
-    def calc_logpi(self, u, v, U):
-        projX = self.X @ U
-        projY = self.Y @ U
-        C = ((projX[..., None] - projY[..., None].T) ** 2).sum(1)
+    def calc_logpi(self, u, v, C):
         return (u[:, None] + v[None, :] - C) / self.eta
 
-    def calc_pi(self, u, v, U):
-        return np.exp(self.calc_logpi(u, v, U))
+    def calc_pi(self, u, v, C):
+        return np.exp(self.calc_logpi(u, v, C))

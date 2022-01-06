@@ -2,7 +2,7 @@ import numpy as np
 from scipy.special import logsumexp
 
 from src.prw import EntropicPRW
-from src.utils import norm_inf
+from src.utils import norm_inf, pairwise_l2
 
 
 def round_plan(pi, a, b):
@@ -17,6 +17,56 @@ def round_plan(pi, a, b):
     err_r = a - pi__.sum(-1)
     err_c = b - pi__.sum(0)
     return pi__ + err_r[:, None] @ err_c[None, :] / np.sum(np.abs(err_r))
+
+
+def RBCD_benchmark(p: EntropicPRW,
+                   u0: np.ndarray, v0: np.ndarray,
+                   U0: np.ndarray,
+                   tau: np.float64,
+                   eps_1: np.float64, eps_2: np.float64):
+    u, v = u0.copy(), v0.copy()
+    U = U0.copy()
+
+    rawC_inf = norm_inf(pairwise_l2(p.X, p.Y))
+    while True:
+        # Compute projected cost matrix
+        C = p.calc_proj_cost(U)
+
+        # Compute pi using current U and previous u, v
+        log_pi = p.calc_logpi(u, v, C)
+
+        # Update u
+        log_ak = logsumexp(log_pi, -1)
+        u = u + np.log(p.a) - log_ak
+
+        # Compute pi using current U, u and previous v
+        log_pi = p.calc_logpi(u, v, C)
+
+        # Update v
+        log_bk = logsumexp(log_pi, 0)
+        v = v + np.log(p.b) - log_bk
+
+        # Compute Vpi using new u and v
+        pi = np.exp(log_pi)
+        t = (p.X[..., None] - p.Y[..., None].T).swapaxes(1, 2)
+        t = t[..., None] @ t[..., None].swapaxes(2, 3)
+        Vpi = (pi[:, :, None, None] * t).sum((0, 1))
+
+        # Compute xi using new Vpi and current U
+        G = - 2. / p.eta * Vpi @ U
+        temp = G.T @ U
+        xi = G - U @ (temp + temp.T) / 2.
+
+        # Update U
+        U, _ = np.linalg.qr(U - tau * xi)
+
+        # Check stopping condition
+        if 4 * p.eta * np.linalg.norm(xi) <= eps_1 \
+                and 8 * rawC_inf * np.linalg.norm(p.a - pi.sum(-1)) <= eps_2 \
+                and 8 * rawC_inf * np.linalg.norm(p.b - pi.sum(0)) <= eps_2:
+            break
+
+    return pi, U
 
 
 def RBCD(p: EntropicPRW,
@@ -37,18 +87,25 @@ def RBCD(p: EntropicPRW,
     if save_U:
         log['U'] = []
 
-    rawC_inf = norm_inf(((p.X[..., None] - p.Y[..., None].T) ** 2).sum(1))
+    rawC_inf = norm_inf(pairwise_l2(p.X, p.Y))
 
+    # t = (p.X[..., None] - p.Y[..., None].T).swapaxes(1, 2)
+    # t = t[..., None] @ t[..., None].swapaxes(2, 3)
+
+    k = 0
     while True:
+        # Compute projected cost matrix
+        C = p.calc_proj_cost(U)
+
         # Compute pi using current U and previous u, v
-        log_pi = p.calc_logpi(u, v, U)
+        log_pi = p.calc_logpi(u, v, C)
 
         # Update u
         log_ak = logsumexp(log_pi, -1)
         u = u + np.log(p.a) - log_ak
 
         # Compute pi using current U, u and previous v
-        log_pi = p.calc_logpi(u, v, U)
+        log_pi = p.calc_logpi(u, v, C)
 
         # Update v
         log_bk = logsumexp(log_pi, 0)
@@ -56,6 +113,7 @@ def RBCD(p: EntropicPRW,
 
         # Compute Vpi using new u and v
         pi = np.exp(log_pi)
+        # Vpi = (pi[:, :, None, None] * t).sum((0, 1))
         A = p.X.T @ pi @ p.Y
         Vpi = p.X.T @ np.diag(pi.sum(-1)) @ p.X  \
             + p.Y.T @ np.diag(pi.sum(0)) @ p.Y \
@@ -66,7 +124,7 @@ def RBCD(p: EntropicPRW,
         temp = G.T @ U
         xi = G - U @ (temp + temp.T) / 2.
 
-        # Compute U^{(t+1)}
+        # Update U
         U, _ = np.linalg.qr(U - tau * xi)
 
         # Log
@@ -77,6 +135,10 @@ def RBCD(p: EntropicPRW,
             log['v'].append(v.copy())
         if save_U:
             log['U'].append(U.copy())
+
+        k += 1
+        if k % 200 == 0:
+            print(k, f)
 
         # Check stopping condition
         if 4 * p.eta * np.linalg.norm(xi) <= eps_1 \
