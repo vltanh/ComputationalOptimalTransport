@@ -73,6 +73,41 @@ def calc_k_stop(p: EntropicUOT, eps: float) -> float:
     return 1 + int(k_float)
 
 
+def update_U(p: EntropicPUOT,
+             u, v,
+             delta,
+             eps_U, max_U):
+    n_U = 0
+    while True:
+        # Compute projected cost matrix
+        C = p.calc_proj_cost(U)
+
+        # Compute pi using current U, u, v
+        pi = p.calc_pi(u, v, C)
+
+        # Compute Vpi using new u and v
+        A = p.X.T @ pi @ p.Y
+        Vpi = p.X.T @ np.diag(pi.sum(-1)) @ p.X  \
+            + p.Y.T @ np.diag(pi.sum(0)) @ p.Y \
+            - A - A.T
+
+        # Compute xi using new Vpi and current U
+        G = - 2. / p.eta * Vpi @ U
+        temp = G.T @ U
+        xi = G - U @ (temp + temp.T) / 2.
+
+        # Update U
+        U, _ = np.linalg.qr(U - delta * xi)
+
+        n_U += 1
+
+        grad_norm = np.linalg.norm(xi)
+        if grad_norm <= eps_U or (max_U is not None and n_U >= max_U):
+            break
+
+    return U, xi, n_IU
+
+
 def solve_entropic_puot(p: EntropicPUOT,
                         u0: np.ndarray, v0: np.ndarray,
                         U0: np.ndarray,
@@ -95,7 +130,6 @@ def solve_entropic_puot(p: EntropicPUOT,
     k = 0
     while True:
         # === Update u/v ===
-
         # Compute projected cost matrix
         C = p.calc_proj_cost(U)
 
@@ -103,16 +137,17 @@ def solve_entropic_puot(p: EntropicPUOT,
         uot = UOT(C, p.a, p.b, p.tau)
 
         # Entropic UOT problem
-        eta = eps_uv / calc_U(uot, eps_uv)
-        euot = uot.entropic_regularize(eta)
+        # p.eta = eps_uv / calc_U(uot, eps_uv)
+        euot = uot.entropic_regularize(p.eta)
 
         # Calculate k
-        n_uv = calc_k_stop(euot, eps_uv)
+        N_uv = calc_k_stop(euot, eps_uv)
         if max_uv is not None:
-            n_uv = min(n_uv, max_uv)
+            N_uv = min(N_uv, max_uv)
 
         # Solve Entropic UOT
-        u, v = solve_entropic_uot(euot, u, v, n_uv)
+        u, v = solve_entropic_uot(euot, u, v, N_uv)
+        # ================
 
         # === Update U ===
         n_U = 0
@@ -142,15 +177,12 @@ def solve_entropic_puot(p: EntropicPUOT,
             grad_norm = np.linalg.norm(xi)
             if grad_norm <= eps_U or (max_U is not None and n_U >= max_U):
                 break
+        # ================
 
         # Log
         C = p.calc_proj_cost(U)
         pi = p.calc_pi(u, v, C)
-        A = p.X.T @ pi @ p.Y
-        Vpi = p.X.T @ np.diag(pi.sum(-1)) @ p.X  \
-            + p.Y.T @ np.diag(pi.sum(0)) @ p.Y \
-            - A - A.T
-        f = np.trace(U.T @ Vpi @ U)
+        f = p.calc_f(pi)
 
         log['f'].append(f)
         if save_uv:
@@ -161,7 +193,7 @@ def solve_entropic_puot(p: EntropicPUOT,
 
         k += 1
         if k % 1 == 0:
-            print(k, f, n_uv, n_U, grad_norm)
+            print(f'{k:6d} {f:.7f} {N_uv:7d} {n_U:7d}')
 
         # Check stopping condition
         if grad_norm <= eps_U and n_U == 1:

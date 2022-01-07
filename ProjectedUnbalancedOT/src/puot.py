@@ -3,7 +3,7 @@ from typing import Union
 import numpy as np
 from src.uot import UOT
 
-from src.utils import pairwise_l2
+from src.utils import pairwise_l2, calc_KL
 
 
 class PUOT:
@@ -45,6 +45,12 @@ class PUOT:
         projX = self.X @ U
         projY = self.Y @ U
         return pairwise_l2(projX, projY)
+
+    def calc_f(self,
+               pi: np.ndarray) -> float:
+        return (self.C * pi).sum() \
+            + self.tau[0] * calc_KL(pi.sum(-1), self.a) \
+            + self.tau[1] * calc_KL(pi.sum(0), self.b)
 
     def entropic_regularize(self, eta: float):
         return EntropicPUOT(self.X, self.Y, self.a, self.b, self.tau, self.k, eta)
