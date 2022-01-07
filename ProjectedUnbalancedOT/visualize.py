@@ -38,7 +38,7 @@ def visualize_3D_plan(X, Y, U, pi):
                 y=[X[i, 1], Y[j, 1]],
                 z=[X[i, 2], Y[j, 2]],
                 line=dict(
-                    width=pi[i, j] * 50,
+                    width=pi[i, j] * 10,
                     color='black',
                 ),
                 marker=dict(
@@ -49,12 +49,13 @@ def visualize_3D_plan(X, Y, U, pi):
                 showlegend=False
             ))
 
-    xp, yp, zp = get_plane(np.zeros(3), null_space(U.T).reshape(-1))
-    data += [
-        go.Surface(x=xp, y=yp, z=zp,
-                   opacity=0.1,
-                   showscale=False)
-    ]
+    if U is not None:
+        xp, yp, zp = get_plane(np.zeros(3), null_space(U.T).reshape(-1))
+        data += [
+            go.Surface(x=xp, y=yp, z=zp,
+                       opacity=0.1,
+                       showscale=False)
+        ]
 
     layout = go.Layout(
         margin={'l': 0, 'r': 0, 'b': 0, 't': 0}

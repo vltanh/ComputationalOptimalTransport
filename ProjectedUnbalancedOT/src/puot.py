@@ -76,3 +76,6 @@ class EntropicPUOT(PUOT):
                 v: np.ndarray,
                 C: np.ndarray) -> np.ndarray:
         return np.exp(self.calc_logpi(u, v, C))
+
+    def original(self):
+        return super().original().entropic_regularize(self.eta)
